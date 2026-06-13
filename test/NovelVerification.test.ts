@@ -91,6 +91,29 @@ describe("NovelVerification", function () {
     });
   });
 
+  describe("setCheckFee", function () {
+    it("lets the owner retune the fee and emits", async function () {
+      await expect(nv.connect(owner).setCheckFee(10_000n))
+        .to.emit(nv, "CheckFeeUpdated")
+        .withArgs(10_000n);
+      expect(await nv.checkFee()).to.equal(10_000n);
+    });
+
+    it("reverts for a non-owner", async function () {
+      await expect(nv.connect(stranger).setCheckFee(10_000n))
+        .to.be.revertedWithCustomError(nv, "OwnableUnauthorizedAccount");
+    });
+
+    it("the new fee is what requestVerification pulls", async function () {
+      await nv.connect(owner).setCheckFee(10_000n);
+      await fundAgent(10_000n, 10_000n);
+      const checkId = ethers.keccak256(ethers.toUtf8Bytes("fee-retune"));
+      const before = await usdc.balanceOf(treasury.address);
+      await nv.connect(agent).requestVerification(checkId, ethers.ZeroHash, ethers.ZeroHash);
+      expect((await usdc.balanceOf(treasury.address)) - before).to.equal(10_000n);
+    });
+  });
+
   describe("requestVerification", function () {
     beforeEach(async function () {
       await fundAgent(CHECK_FEE * 10n, CHECK_FEE * 10n);

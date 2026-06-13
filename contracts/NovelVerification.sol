@@ -40,8 +40,9 @@ contract NovelVerification is IReceiver, Ownable {
     IERC20 public immutable usdc;
     /// @notice Fee destination — funds CRE compute.
     address public immutable treasury;
-    /// @notice Fee pulled per verification request (USDC, 6 decimals).
-    uint256 public immutable checkFee;
+    /// @notice Fee pulled per verification request (USDC, 6 decimals). Owner-tunable
+    ///         via `setCheckFee` — model/CRE costs change, so retune without redeploy.
+    uint256 public checkFee;
     /// @notice Canonical KeystoneForwarder for this chain (CRE delivers through it).
     address public immutable forwarder;
     /// @notice Pinned CRE workflow id; bytes32(0) = don't check.
@@ -87,6 +88,8 @@ contract NovelVerification is IReceiver, Ownable {
     /// @param confidence Model confidence, 0–100.
     /// @param severity   Threat severity, 0–100.
     event Verified(bytes32 indexed checkId, uint8 verdict, uint16 confidence, uint8 severity);
+    /// @param checkFee The new per-request fee (USDC, 6 decimals).
+    event CheckFeeUpdated(uint256 checkFee);
 
     /// @param _usdc                 Fee token (USDC / MockUSDC).
     /// @param _treasury             Fee destination (funds CRE compute).
@@ -111,6 +114,14 @@ contract NovelVerification is IReceiver, Ownable {
         forwarder = _forwarder;
         expectedWorkflowId = _expectedWorkflowId;
         expectedWorkflowOwner = _expectedWorkflowOwner;
+    }
+
+    /// @notice Update the per-request fee (owner only) — retune to model/CRE cost
+    ///         without redeploying. Takes effect on the next `requestVerification`.
+    /// @param _checkFee The new fee (USDC, 6 decimals); 0 = free tier.
+    function setCheckFee(uint256 _checkFee) external onlyOwner {
+        checkFee = _checkFee;
+        emit CheckFeeUpdated(_checkFee);
     }
 
     /// @notice Request a Tier-3 per-check verification — the on-chain CRE trigger.
