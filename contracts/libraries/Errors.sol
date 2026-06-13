@@ -41,6 +41,12 @@ error NotForwarder();
 error InvalidWorkflowId();
 /// @notice CRE report's workflow owner does not match the pinned value.
 error InvalidWorkflowOwner();
+/// @notice `requestVerification` called with a zero checkId.
+error ZeroCheckId();
+/// @notice `requestVerification` called for a checkId already pending or answered.
+error DuplicateCheck();
+/// @notice CRE `onReport` delivered a verdict for an unknown / non-pending checkId.
+error UnknownCheck();
 /// @notice `submitLayer1Verdict` caller is not the CREVerdictReceiver.
 error NotCreReceiver();
 /// @notice `submitLayer2Verdict` caller is not the VerifierPool.
