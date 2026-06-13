@@ -31,6 +31,8 @@ error NotPublisher();
 /// @notice Reputation writes (onMatured/onChallengeWon/onSlash) are restricted to
 ///         authorized protocol writers (the Registry, later the ChallengeManager).
 error NotAuthorizedWriter();
+/// @notice `registerPublisher` called by an already-registered publisher.
+error AlreadyRegistered();
 
 // ---- Lifecycle / state machine ----
 /// @notice The antibody is not in a state this transition allows.
