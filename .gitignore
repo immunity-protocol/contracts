@@ -22,5 +22,8 @@
 # Environment
 .env
 
+# Local untracked one-off ENS registration helper
+/scripts/register-ens-sepolia.ts
+
 # IDE
 /.idea
