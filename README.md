@@ -81,23 +81,40 @@ expiry for ephemeral threats; there is no forced decay.
 ```bash
 npm install
 npm run compile          # solc 0.8.24, viaIR, evmVersion cancun
-npm test
+npm test                 # 120 tests
+```
+
+## End-to-end (local)
+
+`ImmunityCore` deploys + wires + seeds the whole network in one Ignition module. The E2E script deploys it
+in-process and drives the full story (genesis bootstrap → corroboration-K → mature → check / protected-flag
+/ challenge-slash / timeout), asserting every step — no real broadcast:
+
+```bash
+npx hardhat run scripts/seed-and-verify.ts
 ```
 
 ## Deploy (Base Sepolia)
 
+One command deploys + wires + seeds all seven core contracts (+ MockUSDC). Ignition writes the deployed
+addresses to `ignition/deployments/chain-84532/deployed_addresses.json`.
+
 ```bash
 npx hardhat keystore set IMMUNITY_BASE_SEPOLIA_RPC
 npx hardhat keystore set IMMUNITY_DEPLOYER_PK
-./scripts/deploy.sh                      # deploys MockUSDC + Registry (+ dependency stubs) — testnet
-./scripts/deploy.sh --usdc 0xCANONICAL   # uses canonical Base USDC
+npx hardhat ignition deploy ignition/modules/ImmunityCore.ts \
+  --network baseSepolia \
+  --parameters ignition/parameters/baseSepolia.json
 ```
 
-Canonical USDC on Base Sepolia: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`.
+Pass-1 deploy posture (swappable later without code change): USDC = MockUSDC; L2Registry = `StubL2Registry`
+(real Durin swaps in via `PublisherRegistrar.setL2Registry`); CRE forwarder = the deployer EOA with zero
+workflow pins (the real KeystoneForwarder + pinned workflow id/owner means redeploying the receiver, whose
+pins are immutable). Canonical USDC on Base Sepolia: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`.
 
-> The current `deploy.sh` deploys the Registry against pass-1 dependency stubs. The **unified suite deploy
-> + wiring (#9)** — deploy all real contracts, `setDependencies`, seed the protected list + transfer its
-> ownership to a multisig, pin the CRE forwarder/workflow, and `addRegistrar` on Durin — is forthcoming.
+> **Deferred to the SDK/CRE/ENS phase:** real Durin `L2Registry` + `immunity.eth` resolver; real
+> KeystoneForwarder + pinned CRE workflow; transferring `ProtectedSet`/ownerships to a timelock/multisig
+> (mainnet posture); the Uniswap hook (#8).
 
 ## License
 
