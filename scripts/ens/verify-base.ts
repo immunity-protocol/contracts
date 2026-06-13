@@ -37,6 +37,40 @@ function assert(cond: boolean, msg: string) {
   console.log("  ✓ " + msg);
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Send a tx, wait for it, then poll until the node reports no in-flight tx for
+ * the sender (pending nonce == latest nonce). Retries on the RPC's "in-flight
+ * transaction limit reached for delegated accounts" error — EIP-7702 smart
+ * wallets are capped to one in-flight tx and the node lags a beat after mining.
+ */
+async function sendSettled(provider: any, from: string, label: string, fn: () => Promise<any>) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const tx = await fn();
+      await tx.wait();
+      for (let i = 0; i < 10; i++) {
+        const [latest, pending] = await Promise.all([
+          provider.getTransactionCount(from, "latest"),
+          provider.getTransactionCount(from, "pending"),
+        ]);
+        if (latest === pending) break;
+        await sleep(1500);
+      }
+      return tx;
+    } catch (e: any) {
+      if (String(e?.message ?? e).includes("in-flight transaction limit")) {
+        console.log(`  ${label}: in-flight limit, retrying in 3s…`);
+        await sleep(3000);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error(`${label}: exhausted retries (in-flight limit)`);
+}
+
 async function main() {
   const l2 = process.env.IMMUNITY_L2REGISTRY;
   const testPk = process.env.TEST_PK;
@@ -65,9 +99,11 @@ async function main() {
     console.log("  (test wallet already registered — reusing its subname)");
   } else {
     const bond = await registrar.registrationBond();
-    await (await usdc.mint(test.address, bond)).wait();
-    await (await usdc.approve(REGISTRAR, bond)).wait();
-    await (await registrar.registerPublisher(LABEL)).wait();
+    await sendSettled(provider, test.address, "mint", () => usdc.mint(test.address, bond));
+    await sendSettled(provider, test.address, "approve", () => usdc.approve(REGISTRAR, bond));
+    await sendSettled(provider, test.address, "registerPublisher", () =>
+      registrar.registerPublisher(LABEL),
+    );
   }
   const node = await registrar.nodeOf(test.address);
   assert(node !== ZERO_NODE, `subname node minted: ${node}`);
@@ -77,7 +113,9 @@ async function main() {
   );
 
   console.log("\n[2] reputation mirror + un-forgeability");
-  await (await registrar.syncReputation(test.address)).wait();
+  await sendSettled(provider, test.address, "syncReputation", () =>
+    registrar.syncReputation(test.address),
+  );
   console.log(`  immunity.reputation = ${await l2Read.text(node, "immunity.reputation")}`);
   console.log(`  immunity.strikes    = ${await l2Read.text(node, "immunity.strikes")}`);
   let forgeReverted = false;
