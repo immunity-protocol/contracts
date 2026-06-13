@@ -28,7 +28,7 @@ const getSharedSecret = (priv: Uint8Array, pub: Uint8Array): Uint8Array =>
 const randomSecretKey = (): Uint8Array => secp256k1.utils.randomPrivateKey();
 
 const NOVEL_VERIFICATION =
-  process.env.NOVEL_VERIFICATION ?? "0xEED061CF1a64019B12C7Fc604bfcae88204DB8eA";
+  process.env.NOVEL_VERIFICATION ?? "0xe151F9f3cBa23DdDcB7e3379e739F17436488376";
 const MOCK_USDC = "0xe697EF7724453F239D8c0EB9295D87C344D9CE60";
 const GATEWAY = "https://immunity-gateway.fly.dev";
 // Compressed secp256k1 oracle pubkey — the network preset's creOraclePublicKey.
