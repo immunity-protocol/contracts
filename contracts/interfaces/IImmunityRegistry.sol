@@ -56,7 +56,7 @@ interface IImmunityRegistry {
         uint32  immSeq;
         uint64  createdAt;
         address reviewer;               // slot 6 — packed: reviewer(20)+expiresAt(8)+4×uint8
-        uint64  expiresAt;              //          0 is rejected on publish; TTL is mandatory
+        uint64  expiresAt;              //          0 = permanent (slash/retire only); else future
         uint8   abType;                 //          AntibodyType
         uint8   flavor;                 //          sub-type for SEMANTIC, ignored otherwise
         uint8   verdict;                //          Verdict
@@ -82,7 +82,7 @@ interface IImmunityRegistry {
         bytes32 contextHash;
         bytes32 embeddingHash;
         bytes32 attestation;
-        uint64  expiresAt;              // must be in the future — TTL is mandatory
+        uint64  expiresAt;              // 0 = permanent; a finite value must be in the future
         address reviewer;
         bytes32 auxiliaryKey;           // typed dispatch — see auxiliary events
     }

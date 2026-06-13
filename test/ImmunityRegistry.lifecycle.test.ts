@@ -82,6 +82,62 @@ describe("ImmunityRegistry — TTL lifecycle (expire / sweep / retire)", functio
     expect((await registry.getAntibody(b)).status).to.equal(STATUS.PROBATION);
   });
 
+  it("permanent antibody (expiresAt = 0): publishes, settles, matures, but never expires", async function () {
+    const { registry, ethers, alice, bob, carol, dave } = env;
+    const matcher = ethers.id("permanent-threat");
+
+    // publishes OK with expiresAt = 0
+    await registry.connect(alice).publish(makeParams(ethers, { expiresAt: 0, primaryMatcherHash: matcher }));
+    const id = await registry.computeKeccakId(0, 0, matcher, alice.address);
+    expect((await registry.getAntibody(id)).expiresAt).to.equal(0n);
+
+    // check() still settles to it (escrows on PROBATION)
+    await fund(registry, env.usdc, dave, 10_000_000n);
+    await registry.connect(dave).check(id, ethers.ZeroAddress, 0, 0);
+    expect((await registry.getAntibody(id)).escrowedFees).to.equal(PUBLISHER_SHARE);
+
+    // expire() and sweepExpired() must NOT remove a permanent antibody
+    await increaseTime(ethers, 10 * 365 * 24 * 3600); // 10 years on
+    await expect(registry.expire(id)).to.be.revertedWithCustomError(registry, "NotYet");
+    expect(await registry.sweepExpired.staticCall([id])).to.equal(0n);
+
+    // mature() still works (corroborate it)
+    for (const s of [bob, carol]) {
+      await fund(registry, env.usdc, s, 100_000_000n);
+      await registerPublisher(env.registrar, env.reputation, s);
+      await registry.connect(s).publish(makeParams(ethers, { expiresAt: 0, primaryMatcherHash: matcher }));
+    }
+    await registry.mature(id);
+    expect((await registry.getAntibody(id)).status).to.equal(STATUS.ACTIVE);
+  });
+
+  it("permanent antibody can still be challenged and slashed", async function () {
+    const { registry, ethers, alice, challengeManager, challenger } = env;
+    const matcher = ethers.id("permanent-bad");
+    await registry.connect(alice).publish(makeParams(ethers, { expiresAt: 0, primaryMatcherHash: matcher }));
+    const id = await registry.computeKeccakId(0, 0, matcher, alice.address);
+
+    await registry.connect(challengeManager).onChallengeOpened(id);
+    await registry.connect(challengeManager).onChallengeResolved(id, true, challenger.address);
+    expect((await registry.getAntibody(id)).status).to.equal(STATUS.SLASHED);
+  });
+
+  it("finite expiry must be in the future at publish, and expires after the timestamp", async function () {
+    const { registry, ethers, alice } = env;
+    const now = (await ethers.provider.getBlock("latest")).timestamp;
+    // a past finite expiry is rejected
+    await expect(
+      registry.connect(alice).publish(makeParams(ethers, { expiresAt: now - 1, primaryMatcherHash: ethers.id("past") })),
+    ).to.be.revertedWithCustomError(registry, "ExpiryRequired");
+
+    // a future finite expiry behaves as before
+    const id = await publishWithTTL(SOON, "finite-ttl");
+    await expect(registry.expire(id)).to.be.revertedWithCustomError(registry, "NotYet");
+    await increaseTime(ethers, SOON + 1);
+    await registry.expire(id);
+    expect((await registry.getAntibody(id)).status).to.equal(STATUS.EXPIRED);
+  });
+
   it("retire: only the publisher, returns bond, clears matcher", async function () {
     const { registry, ethers, alice, bob } = env;
     const id = await publishWithTTL(SOON * 100);

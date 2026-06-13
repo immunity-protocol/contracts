@@ -29,10 +29,19 @@ describe("ImmunityRegistry — publish", function () {
     ).to.be.revertedWithCustomError(registry, "NotRegistered");
   });
 
-  it("requires a finite future TTL (expiresAt > now)", async function () {
+  it("accepts expiresAt = 0 as a permanent antibody", async function () {
     const { registry, ethers, alice } = env;
+    const params = makeParams(ethers, { expiresAt: 0, primaryMatcherHash: ethers.id("perm") });
+    const [id] = await registry.connect(alice).publish.staticCall(params);
+    await registry.connect(alice).publish(params);
+    expect((await registry.getAntibody(id)).expiresAt).to.equal(0n);
+  });
+
+  it("rejects a finite expiry that is not in the future", async function () {
+    const { registry, ethers, alice } = env;
+    const now = (await ethers.provider.getBlock("latest")).timestamp;
     await expect(
-      registry.connect(alice).publish(makeParams(ethers, { expiresAt: 0 })),
+      registry.connect(alice).publish(makeParams(ethers, { expiresAt: now - 1 })),
     ).to.be.revertedWithCustomError(registry, "ExpiryRequired");
   });
 

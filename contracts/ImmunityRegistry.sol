@@ -200,8 +200,9 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
         if (p.verdict > uint8(Verdict.SUSPICIOUS)) revert InvalidVerdict();
         if (p.confidence > 100) revert InvalidConfidence();
         if (p.severity > 100) revert InvalidSeverity();
-        // TTL is mandatory — `expiresAt == 0` (permanent) is no longer allowed.
-        if (p.expiresAt <= block.timestamp) revert ExpiryRequired();
+        // TTL: `expiresAt == 0` = permanent (removable only by slash/retire); a
+        // finite expiry must be in the future.
+        if (p.expiresAt != 0 && p.expiresAt <= block.timestamp) revert ExpiryRequired();
 
         // Content-addressed identity. Same publisher republishing the same
         // (type, flavor, matcher) collides — the duplicate guard.
@@ -339,7 +340,7 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
                 pub != address(0) &&
                 st != uint8(Status.SLASHED) &&
                 st != uint8(Status.EXPIRED) &&
-                ab.expiresAt > block.timestamp
+                (ab.expiresAt == 0 || ab.expiresAt > block.timestamp)
             ) {
                 uint256 publisherShare = (CHECK_FEE * PUBLISHER_REWARD_BPS) / BPS_DENOMINATOR;
                 uint256 treasuryShare = CHECK_FEE - publisherShare;
@@ -390,7 +391,9 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
         if (pub == address(0)) revert AntibodyNotFound();
         // Only PROBATION → ACTIVE; guarantees onMatured fires exactly once.
         if (ab.status != uint8(Status.PROBATION)) revert InvalidStatusTransition();
-        if (ab.expiresAt <= block.timestamp) revert NotYet();
+        // A permanent antibody (expiresAt == 0) is still maturable; only a finite,
+        // already-passed expiry blocks maturation (it should be expired instead).
+        if (ab.expiresAt != 0 && ab.expiresAt <= block.timestamp) revert NotYet();
         if (!_isMature(ab.primaryMatcherHash)) revert NotYet();
 
         ab.status = uint8(Status.ACTIVE);
@@ -431,7 +434,9 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
         if (ab.status == uint8(Status.SLASHED) || ab.status == uint8(Status.EXPIRED)) {
             revert InvalidStatusTransition();
         }
-        if (ab.expiresAt > block.timestamp) revert NotYet();
+        // Permanent antibodies (expiresAt == 0) are never expirable — only slash or
+        // retire removes them. A finite expiry must have passed.
+        if (ab.expiresAt == 0 || ab.expiresAt > block.timestamp) revert NotYet();
         _settleExpiry(antibodyId, ab, pub);
     }
 
@@ -453,7 +458,8 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
                 st == uint8(Status.SLASHED) ||
                 st == uint8(Status.EXPIRED)
             ) continue;
-            if (ab.expiresAt > block.timestamp) continue;
+            // Skip permanent antibodies and any whose finite expiry hasn't passed.
+            if (ab.expiresAt == 0 || ab.expiresAt > block.timestamp) continue;
             _settleExpiry(id, ab, pub);
             unchecked { ++numExpired; }
         }
