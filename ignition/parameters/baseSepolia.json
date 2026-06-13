@@ -1,6 +1,24 @@
 {
-  "ImmunityRegistry": {
-    "usdc": "0x0000000000000000000000000000000000000000",
-    "challengeManager": "0x0000000000000000000000000000000000000000"
+  "ImmunityCore": {
+    "protectedMultiplier": "1000",
+    "bondBase": "1000000",
+    "bondFloor": "1000000",
+    "corroborationK": 3,
+    "minCorroborationRep": "1",
+    "maturationVolumeThreshold": "0",
+    "genesisGrant": "100",
+    "challengeBondBps": 10000,
+    "minChallengeBond": "5000000",
+    "challengerBountyBps": 4000,
+    "jurorFeeBps": 3000,
+    "layer1FeeBps": 1000,
+    "supermajorityBps": 6700,
+    "layer1Timeout": 3600,
+    "layer2Timeout": 3600,
+    "weth": "0x4200000000000000000000000000000000000006",
+    "uniswapRouter": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "genesis0": "0x18628A448938aD61C3AAd97Eca1f99DE310684B4",
+    "genesis1": "0xC325Fa14E5E48708b3e1cB16c6fde9D1bed5758E",
+    "genesis2": "0xA1E7E10e89dD7EFAc1e7CbDc34015Ce2A1773060"
   }
 }
