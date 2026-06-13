@@ -61,3 +61,11 @@ error InvalidStatusTransition();
 error NotYet();
 /// @notice Operation forbidden while a challenge is open.
 error Challenged();
+
+// ---- L2 subname registry (ENS on Base) ----
+/// @notice Caller is not the registry admin (the deployer / protocol owner).
+error NotAdmin();
+/// @notice `createSubnode` caller is neither an approved registrar nor the admin.
+error NotApprovedRegistrar();
+/// @notice A subname node already exists for this parent + label.
+error LabelTaken();
