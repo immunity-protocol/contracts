@@ -801,7 +801,8 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
             uint256 publisherRep,
             uint8   prominenceTier,
             uint64  maturedAt,
-            uint64  expiresAt
+            uint64  expiresAt,
+            bool    isSeeded
         )
     {
         Antibody storage ab = _antibodies[antibodyId];
@@ -811,6 +812,7 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
         prominenceTier = ab.prominenceTier;
         maturedAt = ab.maturedAt;
         expiresAt = ab.expiresAt;
+        isSeeded = ab.isSeeded == 1;
     }
 
     /// @inheritdoc IImmunityRegistry

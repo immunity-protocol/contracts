@@ -297,8 +297,10 @@ interface IImmunityRegistry {
     ///         rests on the bond + earned-rep cost + the genesis bootstrap.
     function corroborationOf(bytes32 matcherHash) external view returns (uint16);
 
-    /// @notice The read-side enforcement inputs. The SDK/Hook derive advisory vs
-    ///         hard-block from these — protection does NOT wait for `status==ACTIVE`.
+    /// @notice The read-side enforcement inputs. The SDK/Hook derive hard-block
+    ///         eligibility as `corroboration >= K OR isSeeded` — NEVER from
+    ///         `status == ACTIVE` (a later pass can reach ACTIVE via time/volume
+    ///         maturation without corroboration, which must not grant censorship).
     function getEnforcementInputs(bytes32 antibodyId)
         external
         view
@@ -308,7 +310,8 @@ interface IImmunityRegistry {
             uint256 publisherRep,
             uint8   prominenceTier,
             uint64  maturedAt,
-            uint64  expiresAt
+            uint64  expiresAt,
+            bool    isSeeded
         );
 
     /// @notice Pure-view bond preview for the SDK/UI before publishing.

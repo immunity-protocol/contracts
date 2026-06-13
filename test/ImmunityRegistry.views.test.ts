@@ -37,6 +37,19 @@ describe("ImmunityRegistry — views", function () {
     expect(out.prominenceTier).to.equal(0);
     expect(out.maturedAt).to.equal(0n);
     expect(out.expiresAt).to.be.greaterThan(0n);
+    expect(out.isSeeded).to.equal(false);
+  });
+
+  it("getEnforcementInputs flags genesis antibodies via isSeeded", async function () {
+    const { registry, ethers } = env;
+    const params = makeParams(ethers, { primaryMatcherHash: ethers.id("genesis-input") });
+    const [id] = await registry.seedAntibody.staticCall(params);
+    await registry.seedAntibody(params);
+
+    const out = await registry.getEnforcementInputs(id);
+    // SDK derives hard-block from `corroboration >= K OR isSeeded` — genesis qualifies.
+    expect(out.isSeeded).to.equal(true);
+    expect(out.status).to.equal(STATUS.ACTIVE);
   });
 
   it("computeKeccakId matches the id assigned on publish", async function () {

@@ -55,8 +55,14 @@ changes:
 
 **Enforcement (advisory vs hard-block) is read-derived**, never gated on `status == ACTIVE`. The
 contract stores facts + money and exposes the inputs via `getEnforcementInputs`; the SDK and the Uniswap
-hook decide how hard to act. A freshly-corroborated real threat is protected instantly — the `mature()`
-poke and the ACTIVE flip are a financial settlement, not the switch that turns protection on.
+hook derive hard-block eligibility as `corroboration ≥ K OR isSeeded` (genesis). A freshly-corroborated
+real threat is protected instantly — the `mature()` poke and the ACTIVE flip are a financial settlement,
+not the switch that turns protection on. (Keying on `ACTIVE` would be wrong: a later pass can reach ACTIVE
+via time/volume maturation without corroboration, which must not grant censorship power.)
+
+Antibodies are **permanent by default** (`expiresAt == 0`) — a bad actor or injection pattern stays
+flagged until removed by slash (involuntary) or retire (voluntary). A publisher MAY set a finite future
+expiry for ephemeral threats; there is no forced decay.
 
 > **Pass-1 maturation is corroboration-K only.** The undisputed-volume path is stubbed off
 > (`maturationVolumeThreshold = 0`). This is fine for testnet, but **a launch blocker for a real
