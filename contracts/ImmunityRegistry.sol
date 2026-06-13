@@ -120,6 +120,10 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
 
     uint32 public nextImmSeq;
 
+    /// @notice Monotonic per-check counter mixed into the fee-lottery seed so two
+    ///         checks in the same block (same prevrandao / sender) draw differently.
+    uint256 public checkNonce;
+
     // ------------------------------------------------------------------
     //  Constructor
     // ------------------------------------------------------------------
@@ -351,23 +355,35 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
                 uint256 treasuryShare = CHECK_FEE - publisherShare;
                 treasuryBalance += treasuryShare;
 
-                // Direct-pay ONLY when matured (ACTIVE). PROBATION and CHALLENGED
-                // escrow so the share is clawable if later slashed.
+                // Earliness-weighted lottery: corroborators of the same threat
+                // compete for this check's publisher share. Pick ONE matured payee
+                // from the matched threat's corroboration set, weighted toward the
+                // earliest publisher; over many checks payouts approximate the
+                // weights without dust-splitting 0.002 USDC N ways.
+                (address winner, bool winnerMatured) =
+                    _selectFeePayee(ab.primaryMatcherHash, antibodyId);
+
+                // Direct-pay ONLY when the selected payee's antibody is matured
+                // (ACTIVE). When no member of the set is matured the lottery yields
+                // the passed antibody's publisher and we escrow as before, so the
+                // share stays clawable if that PROBATION/CHALLENGED entry is slashed.
                 bool escrowed;
-                if (st == uint8(Status.ACTIVE)) {
-                    balances[pub] += publisherShare;
-                    unchecked { _publishers[pub].totalEarned += uint128(publisherShare); }
+                if (winnerMatured) {
+                    balances[winner] += publisherShare;
+                    unchecked { _publishers[winner].totalEarned += uint128(publisherShare); }
                 } else {
+                    // Escrow always accrues against the passed antibody (the one
+                    // whose status we already loaded), preserving claw-back on slash.
                     ab.escrowedFees += uint96(publisherShare);
                     totalEscrowed += publisherShare;
                     escrowed = true;
-                    emit FeesEscrowed(antibodyId, pub, publisherShare);
+                    emit FeesEscrowed(antibodyId, winner, publisherShare);
                 }
 
                 wasMatch = true;
                 settled = true;
                 emit Matched(
-                    antibodyId, msg.sender, pub, tokenAddress, tokenAmount,
+                    antibodyId, msg.sender, winner, tokenAddress, tokenAmount,
                     originChainId, publisherShare, treasuryShare, escrowed
                 );
             }
@@ -771,6 +787,83 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
         }
         set.pop();
         delete _setPos[id];
+    }
+
+    /// @notice Earliness-weighted pseudo-random fee-lottery draw.
+    /// @dev Returns the publisher who wins this check's publisher share and whether
+    ///      their antibody is matured (ENFORCING/ACTIVE → direct-pay).
+    ///
+    ///      Eligible set = the ENFORCING (ACTIVE) members of `matcherHash`'s
+    ///      corroboration set, head-scanned up to MAX_CORROBORATION_SCAN in publish
+    ///      order. If NONE are matured the threat is still advisory: we keep today's
+    ///      behavior and return the passed antibody's publisher with matured=false so
+    ///      the caller escrows against `passedId` (no lottery on advisory-only sets).
+    ///
+    ///      Weights — geometric decay by publish order: the antibody at scan-rank i
+    ///      (0 = earliest) gets weight 2^(maxRank - i), clamped to a max exponent so
+    ///      a 64-member set can't overflow, and floored at 1. The earliest enforcing
+    ///      publisher is ~dominant (≈50% with ½,¼,⅛… tail); later corroborators still
+    ///      win occasionally, giving corroboration a real fee incentive.
+    ///
+    ///      Randomness = keccak256(prevrandao, msg.sender, ++checkNonce, passedId).
+    ///      Per-check Chainlink VRF is unaffordable against a 0.002 USDC fee. Pseudo-
+    ///      randomness is acceptable here because the only party who could grind the
+    ///      seed is a publisher self-checking to steer the payout to their own entry,
+    ///      and that is structurally unprofitable: they pay the FULL 0.002 fee to win
+    ///      back at most the 80% share, a guaranteed net loss. No honest party is
+    ///      harmed by a biased draw — it only redistributes among co-flaggers of the
+    ///      same real threat.
+    function _selectFeePayee(bytes32 matcherHash, bytes32 passedId)
+        internal
+        returns (address winner, bool matured)
+    {
+        bytes32[] storage set = _matcherSet[matcherHash];
+        uint256 n = set.length;
+        if (n > MAX_CORROBORATION_SCAN) n = MAX_CORROBORATION_SCAN;
+
+        // Collect the enforcing (ACTIVE) members in publish order.
+        address[] memory payees = new address[](n);
+        uint256 k;
+        for (uint256 i; i < n; ++i) {
+            Antibody storage m = _antibodies[set[i]];
+            if (m.status == uint8(Status.ACTIVE)) {
+                payees[k++] = m.publisher;
+            }
+        }
+
+        // No matured member → advisory threat: escrow to the passed publisher.
+        if (k == 0) {
+            return (_antibodies[passedId].publisher, false);
+        }
+        // Single enforcing member always wins (skip the draw + seed write).
+        if (k == 1) {
+            return (payees[0], true);
+        }
+
+        // Geometric weights: rank 0 (earliest) heaviest. Clamp the exponent so the
+        // weight fits comfortably (2^maxExp) and floor every weight at 1.
+        uint256 maxRank = k - 1;
+        uint256 total;
+        uint256[] memory cum = new uint256[](k);
+        for (uint256 i; i < k; ++i) {
+            uint256 exp = maxRank - i;
+            if (exp > 32) exp = 32; // clamp: 2^32 dwarfs the long tail, no overflow
+            uint256 w = uint256(1) << exp; // >= 1 always
+            total += w;
+            cum[i] = total; // cumulative threshold
+        }
+
+        uint256 seed = uint256(
+            keccak256(abi.encode(block.prevrandao, msg.sender, ++checkNonce, passedId))
+        );
+        uint256 draw = seed % total;
+        for (uint256 i; i < k; ++i) {
+            if (draw < cum[i]) {
+                return (payees[i], true);
+            }
+        }
+        // Unreachable (draw < total == cum[k-1]); fall back to the earliest.
+        return (payees[0], true);
     }
 
     /// @dev Live count of distinct registered publishers flagging `matcherHash`
