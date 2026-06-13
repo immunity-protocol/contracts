@@ -39,6 +39,16 @@ export default defineConfig({
     requiredConfirmations: 1,
   },
   networks: {
+    // Ethereum Sepolia — L1 home of the signed off-chain ENS resolver
+    // (ImmunityL1Resolver). ENS apps query this chain; the resolver defers to
+    // our gateway, which reads the records from the Base Sepolia L2Registry.
+    sepolia: {
+      type: "http",
+      chainType: "l1",
+      chainId: 11155111,
+      url: configVariable("IMMUNITY_SEPOLIA_RPC"),
+      accounts: [configVariable("IMMUNITY_SEPOLIA_DEPLOYER_PK")],
+    },
     baseSepolia: {
       type: "http",
       chainType: "l1",
