@@ -64,9 +64,16 @@ async function main() {
   await tx2.wait();
   console.log("  confirmed");
 
-  const wired = await registrar.l2registry();
+  // Poll the post-check: load-balanced RPCs can serve a stale node right after a
+  // mined tx, so a single read may lag a block. Retry before declaring failure.
+  let wired = "";
+  for (let i = 0; i < 6; i++) {
+    wired = await registrar.l2registry();
+    if (wired.toLowerCase() === l2.toLowerCase()) break;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
   if (wired.toLowerCase() !== l2.toLowerCase()) {
-    throw new Error(`post-check failed: registrar.l2registry()=${wired} != ${l2}`);
+    throw new Error(`post-check failed after retries: registrar.l2registry()=${wired} != ${l2}`);
   }
   console.log(`\n✅ registrar.l2registry() == ${wired} — wired to ImmunityL2Registry`);
 }
