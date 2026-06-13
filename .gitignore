@@ -1,0 +1,26 @@
+# Node modules
+/node_modules
+
+# Compilation output
+/dist
+
+# Hardhat build artifacts
+/artifacts
+
+# Hardhat compilation cache
+/cache
+
+# Typechain output
+/types
+
+# Hardhat coverage reports
+/coverage
+
+# Ignition deployments
+/ignition/deployments
+
+# Environment
+.env
+
+# IDE
+/.idea
