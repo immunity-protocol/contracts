@@ -174,6 +174,7 @@ interface IImmunityRegistry {
     event Retired(bytes32 indexed keccakId, address indexed publisher, uint256 bondReleased);
     event ChallengeOpened(bytes32 indexed keccakId);
     event ChallengeUpheld(bytes32 indexed keccakId, address indexed publisher);
+    event ChallengeTimedOut(bytes32 indexed keccakId, address indexed publisher);
     event Slashed(
         bytes32 indexed keccakId,
         address indexed publisher,
@@ -250,6 +251,11 @@ interface IImmunityRegistry {
     /// @param invalid     true → antibody proven false (slash); false → upheld
     /// @param challenger  recipient of the forfeited bond + escrow on slash
     function onChallengeResolved(bytes32 antibodyId, bool invalid, address challenger) external;
+
+    /// @notice Restore a challenged antibody WITHOUT any reputation credit, for an
+    ///         un-adjudicated timeout (the jury never answered). Same tier-restore +
+    ///         escrow release as an upheld verdict, but no `onChallengeWon`.
+    function onChallengeTimedOut(bytes32 antibodyId) external;
 
     // ------------------------------------------------------------------
     //  State-changing — admin

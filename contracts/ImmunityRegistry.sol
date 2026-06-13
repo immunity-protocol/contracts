@@ -598,6 +598,38 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
         }
     }
 
+    /// @inheritdoc IImmunityRegistry
+    /// @dev Timeout restore: identical to the upheld branch (restore prior tier;
+    ///      release escrow accrued during the challenge if it was matured) but with
+    ///      NO reputation credit — a timeout is un-adjudicated, so it must not count
+    ///      as a "win" (that would let an actor self-challenge and farm reputation).
+    function onChallengeTimedOut(bytes32 antibodyId)
+        external
+        override
+        onlyChallengeManager
+        nonReentrant
+    {
+        Antibody storage ab = _antibodies[antibodyId];
+        address pub = ab.publisher;
+        if (pub == address(0)) revert AntibodyNotFound();
+        if (ab.status != uint8(Status.CHALLENGED)) revert InvalidStatusTransition();
+
+        bool wasMatured = ab.maturedAt != 0;
+        ab.status = wasMatured ? uint8(Status.ACTIVE) : uint8(Status.PROBATION);
+        if (wasMatured) {
+            uint256 escrow = ab.escrowedFees;
+            if (escrow != 0) {
+                ab.escrowedFees = 0;
+                totalEscrowed -= escrow;
+                balances[pub] += escrow;
+                unchecked { _publishers[pub].totalEarned += uint128(escrow); }
+                emit FeesReleased(antibodyId, pub, escrow);
+            }
+        }
+        // No _reputationOnChallengeWon — un-adjudicated timeout earns nothing.
+        emit ChallengeTimedOut(antibodyId, pub);
+    }
+
     // ------------------------------------------------------------------
     //  Admin — seed, treasury, params, pause
     // ------------------------------------------------------------------
