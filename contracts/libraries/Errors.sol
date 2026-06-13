@@ -28,6 +28,9 @@ error NotRegistered();
 error NotChallengeManager();
 /// @notice `retire` is restricted to the antibody's own publisher.
 error NotPublisher();
+/// @notice Reputation writes (onMatured/onChallengeWon/onSlash) are restricted to
+///         authorized protocol writers (the Registry, later the ChallengeManager).
+error NotAuthorizedWriter();
 
 // ---- Lifecycle / state machine ----
 /// @notice The antibody is not in a state this transition allows.
