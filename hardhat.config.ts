@@ -33,6 +33,11 @@ export default defineConfig({
       },
     },
   },
+  // Testnet deploys only need 1 confirmation; combined with the serialized
+  // ImmunityCore module this keeps the sequential deploy reasonably fast.
+  ignition: {
+    requiredConfirmations: 1,
+  },
   networks: {
     baseSepolia: {
       type: "http",
