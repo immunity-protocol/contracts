@@ -55,9 +55,15 @@ describe("Reputation ⇄ ImmunityRegistry integration", function () {
     const aliceId = await registry.computeKeccakId(0, 0, matcher, alice.address);
     const before = await reputation.scoreOf(alice.address);
 
+    // Stake-weighted: credit = bond / repBondUnit. The default antibody bonds
+    // severity-60 = 1.6 USDC = 1_600_000; at repBondUnit 100_000 that's 16 pts.
+    const bond = (await registry.getAntibody(aliceId)).bondAmount;
+    const expectedCredit = bond / 100_000n; // 16
+    expect(expectedCredit).to.equal(16n);
+
     await expect(registry.mature(aliceId)).to.emit(reputation, "Matured");
 
-    expect(await reputation.scoreOf(alice.address)).to.equal(before + 10n); // maturePoints
+    expect(await reputation.scoreOf(alice.address)).to.equal(before + expectedCredit);
     expect((await reputation.getPublisher(alice.address)).maturedCount).to.equal(1n);
   });
 
@@ -66,14 +72,14 @@ describe("Reputation ⇄ ImmunityRegistry integration", function () {
       await registry.connect(s).publish(makeParams(ethers, { primaryMatcherHash: matcher }));
     }
     const aliceId = await registry.computeKeccakId(0, 0, matcher, alice.address);
-    await registry.mature(aliceId); // score now 110
+    await registry.mature(aliceId); // score now 100 (genesis) + 16 (stake-weighted)
 
     await registry.connect(challengeManager).onChallengeOpened(aliceId);
     await expect(
       registry.connect(challengeManager).onChallengeResolved(aliceId, true, challenger.address),
     ).to.emit(reputation, "Slashed");
 
-    // 110 - slashPenalty(1000) floors to 0; one proven lie wipes the earned score.
+    // 116 - slashPenalty(1000) floors to 0; one proven lie wipes the earned score.
     expect(await reputation.scoreOf(alice.address)).to.equal(0n);
     expect((await reputation.getPublisher(alice.address)).slashedCount).to.equal(1n);
   });

@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IReputation} from "./interfaces/IReputation.sol";
-import {ZeroAddress, NotAuthorizedWriter} from "./libraries/Errors.sol";
+import {ZeroAddress, ZeroAmount, NotAuthorizedWriter} from "./libraries/Errors.sol";
 
 /// @title Reputation — the protocol's on-chain memory of who has been right.
 /// @notice The career-long skin-in-the-game that complements the per-antibody bond:
@@ -40,10 +40,31 @@ contract Reputation is IReputation, Ownable {
     /// @notice Protocol contracts allowed to write reputation (Registry, ChallengeManager).
     mapping(address => bool) public authorizedWriter;
 
-    // Owner-tunable point scale. slashPenalty MUST stay ≫ maturePoints
-    // (slow to build, fast to lose).
-    uint256 public maturePoints       = 10;
-    uint256 public challengeWonPoints = 20;
+    // Owner-tunable scale. Reputation is now STAKE-WEIGHTED: a matured/won antibody
+    // credits points proportional to the USDC bond it locked (capped), not a flat
+    // amount — so a publisher can't cheaply farm standing by self-corroborating a
+    // swarm of zero-stakes flags (finding G2).
+    //
+    // Chosen defaults (USDC 6dp; Registry bondFloor = bondBase = 1.0 USDC = 1_000_000):
+    //   repBondUnit      = 100_000  → 0.1 USDC of bond == 1 reputation point.
+    //   maturePointsCap  = 50       → one mature credits at most 50 pts.
+    //   challengeWonCap  = 100      → one challenge-win credits at most 100 pts.
+    //   slashPenalty     = 1000     → catastrophic, flat, ≫ any single earned credit.
+    //
+    // Property check against the Registry's minCorroborationRep floor (default 25):
+    //   • smallest bond (1.0 USDC, severity 0) matured  → 1_000_000/100_000 = 10 pts.
+    //     ONE small self-mature (10) < 25 → does NOT clear the floor. ✓
+    //     TWO small self-matures (20)    < 25 → still does NOT clear the floor. ✓
+    //     THREE+ real matures (30)       ≥ 25 → an organic grinder clears it. ✓
+    //   • a challenge-win on any non-minimal bond clears it in one shot, e.g. a
+    //     protected target (×10 ⇒ ≥10 USDC bond) ⇒ (2·10_000_000)/100_000 = 200,
+    //     capped at 100 ≫ 25 — challenge survival is the premium signal. (Only the
+    //     rock-bottom 1.0-USDC severity-0 win lands at 20, by design the weakest case.)
+    //   • a genesis publisher is granted score 100 at deploy ⇒ clears 25 comfortably. ✓
+    // slashPenalty MUST stay ≫ a single credit (slow to build, fast to lose).
+    uint256 public repBondUnit        = 100_000;
+    uint256 public maturePointsCap    = 50;
+    uint256 public challengeWonCap    = 100;
     uint256 public slashPenalty       = 1000;
 
     event Matured(address indexed publisher, uint256 newScore);
@@ -51,7 +72,7 @@ contract Reputation is IReputation, Ownable {
     event Slashed(address indexed publisher, uint256 newScore);
     event GenesisGranted(address indexed publisher, uint256 amount, uint256 newScore);
     event AuthorizedWriterSet(address indexed writer, bool ok);
-    event PointsUpdated(uint256 maturePoints, uint256 challengeWonPoints, uint256 slashPenalty);
+    event PointsUpdated(uint256 repBondUnit, uint256 maturePointsCap, uint256 challengeWonCap, uint256 slashPenalty);
 
     constructor() Ownable(msg.sender) {}
 
@@ -84,18 +105,28 @@ contract Reputation is IReputation, Ownable {
     // contract just accumulates.
 
     /// @inheritdoc IReputation
-    function onMatured(address publisher) external onlyWriter {
+    /// @dev Stake-weighted: credit = min(maturePointsCap, weight / repBondUnit), where
+    ///      `weight` is the antibody's locked bond. A unit (or smaller) bond credits
+    ///      few points; impact scales with skin-in-the-game and is capped.
+    function onMatured(address publisher, uint256 weight) external onlyWriter {
         Publisher storage p = _pub[publisher];
-        uint256 newScore = p.score + maturePoints;
+        uint256 credit = weight / repBondUnit;
+        if (credit > maturePointsCap) credit = maturePointsCap;
+        uint256 newScore = p.score + credit;
         p.score = newScore;
         unchecked { p.maturedCount += 1; }
         emit Matured(publisher, newScore);
     }
 
     /// @inheritdoc IReputation
-    function onChallengeWon(address publisher) external onlyWriter {
+    /// @dev Stake-weighted at a 2× premium: credit = min(challengeWonCap, 2·weight / repBondUnit).
+    ///      Surviving an adjudicated challenge is the strongest correctness signal, so
+    ///      it pays more per unit of bond than a quiet maturation.
+    function onChallengeWon(address publisher, uint256 weight) external onlyWriter {
         Publisher storage p = _pub[publisher];
-        uint256 newScore = p.score + challengeWonPoints;
+        uint256 credit = (2 * weight) / repBondUnit;
+        if (credit > challengeWonCap) credit = challengeWonCap;
+        uint256 newScore = p.score + credit;
         p.score = newScore;
         unchecked { p.challengesWon += 1; }
         emit ChallengeWon(publisher, newScore);
@@ -136,15 +167,20 @@ contract Reputation is IReputation, Ownable {
         emit AuthorizedWriterSet(writer, ok);
     }
 
-    /// @notice Tune the point scale. Should keep `slashPenalty ≫ maturePoints`.
+    /// @notice Tune the stake-weight scale. `repBondUnit` must be non-zero (it is a
+    ///         divisor). Should keep `slashPenalty ≫` any single capped credit so
+    ///         standing stays slow to build and fast to lose.
     function setPoints(
-        uint256 maturePoints_,
-        uint256 challengeWonPoints_,
+        uint256 repBondUnit_,
+        uint256 maturePointsCap_,
+        uint256 challengeWonCap_,
         uint256 slashPenalty_
     ) external onlyOwner {
-        maturePoints = maturePoints_;
-        challengeWonPoints = challengeWonPoints_;
+        if (repBondUnit_ == 0) revert ZeroAmount();
+        repBondUnit = repBondUnit_;
+        maturePointsCap = maturePointsCap_;
+        challengeWonCap = challengeWonCap_;
         slashPenalty = slashPenalty_;
-        emit PointsUpdated(maturePoints_, challengeWonPoints_, slashPenalty_);
+        emit PointsUpdated(repBondUnit_, maturePointsCap_, challengeWonCap_, slashPenalty_);
     }
 }

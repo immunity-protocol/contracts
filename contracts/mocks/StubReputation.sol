@@ -15,6 +15,11 @@ contract StubReputation is IReputation {
     mapping(address => uint256) public slashCalls;
     mapping(address => uint256) public challengeWonCalls;
 
+    /// @notice Records the `weight` (bond) the Registry passed on the LAST call, so
+    ///         tests can assert reputation is now stake-weighted (G2) rather than flat.
+    mapping(address => uint256) public lastMaturedWeight;
+    mapping(address => uint256) public lastChallengeWonWeight;
+
     function setScore(address publisher, uint256 score) external {
         _score[publisher] = score;
     }
@@ -23,15 +28,17 @@ contract StubReputation is IReputation {
         return _score[publisher];
     }
 
-    function onMatured(address publisher) external {
+    function onMatured(address publisher, uint256 weight) external {
         maturedCalls[publisher] += 1;
+        lastMaturedWeight[publisher] = weight;
     }
 
     function onSlash(address publisher) external {
         slashCalls[publisher] += 1;
     }
 
-    function onChallengeWon(address publisher) external {
+    function onChallengeWon(address publisher, uint256 weight) external {
         challengeWonCalls[publisher] += 1;
+        lastChallengeWonWeight[publisher] = weight;
     }
 }

@@ -12,11 +12,15 @@ interface IReputation {
     function scoreOf(address publisher) external view returns (uint256);
 
     /// @notice An antibody by `publisher` matured (earned positive signal).
-    function onMatured(address publisher) external;
+    /// @param weight The antibody's locked bond (USDC, 6dp) — reputation is credited
+    ///        in proportion to skin-in-the-game so it can't be cheaply self-farmed.
+    function onMatured(address publisher, uint256 weight) external;
 
     /// @notice An antibody by `publisher` was proven false and slashed.
     function onSlash(address publisher) external;
 
     /// @notice A challenge against `publisher`'s antibody was resolved in its favor.
-    function onChallengeWon(address publisher) external;
+    /// @param weight The antibody's locked bond (USDC, 6dp) — surviving a challenge is
+    ///        the premium signal and is credited at a multiple of the bond.
+    function onChallengeWon(address publisher, uint256 weight) external;
 }

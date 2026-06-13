@@ -407,7 +407,7 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
             unchecked { _publishers[pub].totalEarned += uint128(fees); }
             emit FeesReleased(antibodyId, pub, fees);
         }
-        _reputationOnMatured(pub);
+        _reputationOnMatured(pub, ab.bondAmount);
         emit Matured(antibodyId, pub, fees, uint64(block.timestamp));
     }
 
@@ -593,7 +593,7 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
                     emit FeesReleased(antibodyId, pub, escrow);
                 }
             }
-            _reputationOnChallengeWon(pub);
+            _reputationOnChallengeWon(pub, ab.bondAmount);
             emit ChallengeUpheld(antibodyId, pub);
         }
     }
@@ -729,16 +729,18 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
     //  Reputation signal helpers (no-op if reputation unset)
     // ------------------------------------------------------------------
 
-    function _reputationOnMatured(address pub) internal {
-        if (address(reputation) != address(0)) reputation.onMatured(pub);
+    /// @dev `weight` is the antibody's locked bond — reputation is credited in
+    ///      proportion to skin-in-the-game (G2), capped inside Reputation.
+    function _reputationOnMatured(address pub, uint256 weight) internal {
+        if (address(reputation) != address(0)) reputation.onMatured(pub, weight);
     }
 
     function _reputationOnSlash(address pub) internal {
         if (address(reputation) != address(0)) reputation.onSlash(pub);
     }
 
-    function _reputationOnChallengeWon(address pub) internal {
-        if (address(reputation) != address(0)) reputation.onChallengeWon(pub);
+    function _reputationOnChallengeWon(address pub, uint256 weight) internal {
+        if (address(reputation) != address(0)) reputation.onChallengeWon(pub, weight);
     }
 
     // ------------------------------------------------------------------
