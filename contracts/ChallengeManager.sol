@@ -186,9 +186,11 @@ contract ChallengeManager is IChallengeManager, Ownable, ReentrancyGuard {
     }
 
     /// @notice Liveness: if no verdict arrives within the window, resolve
-    ///         conservatively — uphold (no slash) and return the challenger bond.
-    /// @dev This fires the Registry's `onChallengeWon` (a small, accepted
-    ///      generosity for an un-adjudicated timeout in pass-1).
+    ///         conservatively — restore the antibody (no slash) and return the
+    ///         challenger bond.
+    /// @dev Routes through the Registry's `onChallengeTimedOut`, which restores the
+    ///      antibody WITHOUT any reputation credit — an un-adjudicated timeout is
+    ///      not a "win", so it can't be used to farm reputation.
     function resolveTimeout(bytes32 antibodyId) external nonReentrant {
         Challenge storage c = challengeOf[antibodyId];
         if (c.status == CStatus.LAYER1_PENDING) {
@@ -203,8 +205,8 @@ contract ChallengeManager is IChallengeManager, Ownable, ReentrancyGuard {
         uint256 bond = c.bond;
         c.status = CStatus.RESOLVED;
 
-        registry.onChallengeResolved(antibodyId, false, challenger); // uphold
-        if (bond != 0) usdc.safeTransfer(challenger, bond);          // full refund, no penalty
+        registry.onChallengeTimedOut(antibodyId);          // restore, NO reputation credit
+        if (bond != 0) usdc.safeTransfer(challenger, bond); // full refund (challenger did nothing wrong)
 
         emit Resolved(antibodyId, false, challenger, 0, 0, 0);
     }
