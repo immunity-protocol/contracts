@@ -67,4 +67,32 @@ describe("ProtectedSet ⇄ ImmunityRegistry integration (bond scaling)", functio
     expect(await registry.computeBond(0, PROTECTED)).to.equal(BOND_BASE * PROTECTED_MULT);
     expect(await registry.computeBond(0, NORMAL)).to.equal(BOND_BASE);
   });
+
+  it("emits ProtectedFlagged on a protected-target publish (G5 hunter hook)", async function () {
+    const { registry, ethers, alice } = env;
+    const params = makeParams(ethers, {
+      abType: ABTYPE.ADDRESS,
+      severity: 0,
+      primaryMatcherHash: ethers.id("matcher-" + PROTECTED),
+      auxiliaryKey: ethers.zeroPadValue(PROTECTED, 32),
+    });
+    const [id] = await registry.connect(alice).publish.staticCall(params);
+    await expect(registry.connect(alice).publish(params))
+      .to.emit(registry, "ProtectedFlagged")
+      .withArgs(id, PROTECTED, alice.address);
+  });
+
+  it("does NOT emit ProtectedFlagged when the target is not protected", async function () {
+    const { registry, ethers, alice } = env;
+    const params = makeParams(ethers, {
+      abType: ABTYPE.ADDRESS,
+      severity: 0,
+      primaryMatcherHash: ethers.id("matcher-" + NORMAL),
+      auxiliaryKey: ethers.zeroPadValue(NORMAL, 32),
+    });
+    await expect(registry.connect(alice).publish(params)).to.not.emit(
+      registry,
+      "ProtectedFlagged",
+    );
+  });
 });

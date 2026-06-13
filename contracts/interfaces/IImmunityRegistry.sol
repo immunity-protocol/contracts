@@ -133,6 +133,12 @@ interface IImmunityRegistry {
     event GraphTaintAdded(bytes32 indexed taintSetId, bytes32 indexed keccakId, address indexed publisher);
     event SemanticPatternAdded(uint8 indexed flavor, bytes32 indexed keccakId, address indexed publisher);
 
+    /// @notice Emitted when a freshly published antibody flags a PROTECTED target.
+    ///         The min-viable auto-challenge hook (G5): a reference hunter watches
+    ///         this and opens a challenge against the flag. Intentionally NOT a
+    ///         treasury-funded auto-challenge — that's roadmap.
+    event ProtectedFlagged(bytes32 indexed keccakId, address indexed target, address indexed publisher);
+
     // ------------------------------------------------------------------
     //  Events — check / settlement
     // ------------------------------------------------------------------

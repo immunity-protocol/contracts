@@ -272,6 +272,9 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
             p.embeddingHash, p.attestation, bond, p.expiresAt, createdAt, isSeeded
         );
         if (bond != 0) emit BondLocked(keccakId, publisher, bond);
+        // G5: flagging a protected target emits a hunter-facing signal so a reference
+        // hunter can watch and open a challenge (min-viable auto-challenge hook).
+        if (prot) emit ProtectedFlagged(keccakId, target, publisher);
         _emitAuxiliary(p.abType, p.flavor, keccakId, p.auxiliaryKey, publisher);
     }
 
