@@ -62,24 +62,28 @@ describe("VerifierPool (Layer-2 stub)", function () {
       );
     });
 
-    it("resolveTimeout (Layer-2) upholds conservatively and refunds the challenger", async function () {
-      const { manager, registry, usdc, ethers, challenger } = env;
+    it("resolveTimeout (Layer-2) restores conservatively, refunds the challenger, credits no reputation", async function () {
+      const { manager, registry, reputation, usdc, ethers, alice, challenger } = env;
       const before = await usdc.balanceOf(challenger.address);
+      const wonBefore = (await reputation.getPublisher(alice.address)).challengesWon;
       await increaseTime(ethers, LAYER_TIMEOUT + 1);
       await manager.resolveTimeout(id);
 
-      expect((await registry.getAntibody(id)).status).to.equal(STATUS.PROBATION); // upheld, no slash
+      expect((await registry.getAntibody(id)).status).to.equal(STATUS.PROBATION); // restored, no slash
       expect(await usdc.balanceOf(challenger.address)).to.equal(before + MIN_CHALLENGE_BOND); // full refund
+      expect((await reputation.getPublisher(alice.address)).challengesWon).to.equal(wonBefore); // no win credited
     });
   });
 
-  it("resolveTimeout (Layer-1) upholds when no verdict arrives", async function () {
-    const { manager, registry, usdc, ethers, challenger } = env;
+  it("resolveTimeout (Layer-1) restores when no verdict arrives, credits no reputation", async function () {
+    const { manager, registry, reputation, usdc, ethers, alice, challenger } = env;
     const before = await usdc.balanceOf(challenger.address);
+    const wonBefore = (await reputation.getPublisher(alice.address)).challengesWon;
     await increaseTime(ethers, LAYER_TIMEOUT + 1);
     await manager.resolveTimeout(id);
 
     expect((await registry.getAntibody(id)).status).to.equal(STATUS.PROBATION);
     expect(await usdc.balanceOf(challenger.address)).to.equal(before + MIN_CHALLENGE_BOND);
+    expect((await reputation.getPublisher(alice.address)).challengesWon).to.equal(wonBefore);
   });
 });
