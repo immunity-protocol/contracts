@@ -31,7 +31,7 @@ export default buildModule("ImmunityCore", (m) => {
   const bondBase = m.getParameter("bondBase", 1_000_000n);
   const bondFloor = m.getParameter("bondFloor", 1_000_000n);
   const corroborationK = m.getParameter("corroborationK", 3);
-  const minCorroborationRep = m.getParameter("minCorroborationRep", 1n);
+  const minCorroborationRep = m.getParameter("minCorroborationRep", 25n);
   const volumeThreshold = m.getParameter("maturationVolumeThreshold", 0n);
   const genesisGrant = m.getParameter("genesisGrant", 100n);
 
