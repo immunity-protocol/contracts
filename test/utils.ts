@@ -122,3 +122,69 @@ export async function increaseTime(ethers: any, seconds: number) {
   await ethers.provider.send("evm_increaseTime", [seconds]);
   await ethers.provider.send("evm_mine", []);
 }
+
+/// Full challenge-game stack: real Registry + Reputation + ChallengeManager +
+/// CREVerdictReceiver + VerifierPool, plus stub registrar/protectedSet. The CRE
+/// receiver is deployed with the workflow pins DISABLED (zero) so integration
+/// tests can drive `onReport` from the `forwarder` signer. `alice` is registered
+/// and funded; `challenger` holds USDC approved to the manager.
+export async function setupChallengeFixture() {
+  const ethers = await getEthers();
+  const [owner, alice, bob, carol, challenger, forwarder] = await ethers.getSigners();
+
+  const usdc = await (await ethers.getContractFactory("MockUSDC")).deploy();
+  await usdc.waitForDeployment();
+  const registrar = await (await ethers.getContractFactory("StubPublisherRegistrar")).deploy();
+  await registrar.waitForDeployment();
+  const reputation = await (await ethers.getContractFactory("Reputation")).deploy();
+  await reputation.waitForDeployment();
+  const protectedSet = await (await ethers.getContractFactory("StubProtectedSet")).deploy();
+  await protectedSet.waitForDeployment();
+
+  // Manager has no constructor dep on the registry, so deploy it first and pass
+  // its address into the Registry constructor as the wired challengeManager.
+  const manager = await (await ethers.getContractFactory("ChallengeManager")).deploy(
+    await usdc.getAddress(),
+  );
+  await manager.waitForDeployment();
+
+  const registry = await (await ethers.getContractFactory("ImmunityRegistry")).deploy(
+    await usdc.getAddress(),
+    await registrar.getAddress(),
+    await reputation.getAddress(),
+    await protectedSet.getAddress(),
+    await manager.getAddress(),
+  );
+  await registry.waitForDeployment();
+
+  const receiver = await (await ethers.getContractFactory("CREVerdictReceiver")).deploy(
+    forwarder.address,
+    ZERO_BYTES32, // workflow id pin disabled
+    ethers.ZeroAddress, // workflow owner pin disabled
+  );
+  await receiver.waitForDeployment();
+  const pool = await (await ethers.getContractFactory("VerifierPool")).deploy();
+  await pool.waitForDeployment();
+
+  // Wire everything.
+  await reputation.setAuthorizedWriter(await registry.getAddress(), true);
+  await manager.setRegistry(await registry.getAddress());
+  await manager.setCreReceiver(await receiver.getAddress());
+  await manager.setVerifierPool(await pool.getAddress());
+  await receiver.setChallengeManager(await manager.getAddress());
+  await pool.setChallengeManager(await manager.getAddress());
+
+  // alice: registered publisher with Registry balance for antibody bonds.
+  await registrar.setRegistered(alice.address, true);
+  await reputation.grantGenesisReputation(alice.address, 100n);
+  await fund(registry, usdc, alice, 100_000_000n);
+
+  // challenger: USDC approved to the manager for challenge bonds.
+  await usdc.mint(challenger.address, 100_000_000n);
+  await usdc.connect(challenger).approve(await manager.getAddress(), 100_000_000n);
+
+  return {
+    ethers, owner, alice, bob, carol, challenger, forwarder,
+    usdc, registrar, reputation, protectedSet, registry, manager, receiver, pool,
+  };
+}
