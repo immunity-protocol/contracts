@@ -90,7 +90,9 @@ contract ImmunityRegistry is IImmunityRegistry, Ownable, Pausable, ReentrancyGua
     uint256 public bondFloor           = 1_000_000;  // 1.0 USDC — severity 0 still costs
     uint256 public protectedMultiplier = 10;         // flagging a protected target ×10
     uint16  public corroborationK      = 3;          // distinct reputable publishers to mature
-    uint256 public minCorroborationRep = 1;          // rep floor to count toward K
+    uint256 public minCorroborationRep = 25;         // rep floor to count toward K (G3): a
+                                                     // single small self-mature (10 pts) can't
+                                                     // reach it; genesis (score 100) clears it
     uint256 public maturationVolumeThreshold = 0;    // 0 = volume path DISABLED (pass 1)
 
     // ------------------------------------------------------------------

@@ -36,7 +36,7 @@ describe("Reputation ⇄ ImmunityRegistry integration", function () {
     // Authorize the Registry to write reputation.
     await reputation.setAuthorizedWriter(await registry.getAddress(), true);
 
-    // Genesis-bootstrap the three publishers so they clear minCorroborationRep (1)
+    // Genesis-bootstrap the three publishers so they clear minCorroborationRep (25)
     // and can corroborate at launch; register + fund them.
     for (const s of [alice, bob, carol]) {
       await reputation.grantGenesisReputation(s.address, 100n);
@@ -82,6 +82,29 @@ describe("Reputation ⇄ ImmunityRegistry integration", function () {
     // 116 - slashPenalty(1000) floors to 0; one proven lie wipes the earned score.
     expect(await reputation.scoreOf(alice.address)).to.equal(0n);
     expect((await reputation.getPublisher(alice.address)).slashedCount).to.equal(1n);
+  });
+
+  it("corroboration floor: genesis (100) counts, a below-floor publisher does not", async function () {
+    // The floor was raised to 25 (G3). The three genesis publishers (score 100)
+    // must still clear it → corroborationOf == 3 (the live-seed path).
+    expect(await registry.minCorroborationRep()).to.equal(25n);
+    for (const s of [alice, bob, carol]) {
+      await registry.connect(s).publish(makeParams(ethers, { primaryMatcherHash: matcher }));
+    }
+    expect(await registry.corroborationOf(matcher)).to.equal(3);
+
+    // Dave is registered + funded but has NO reputation (score 0 < 25). His flag is
+    // recorded but does NOT count toward corroboration — sybil/fresh identities are
+    // filtered by the floor.
+    await registrar.setRegistered(dave.address, true);
+    await fund(registry, usdc, dave, 100_000_000n);
+    await registry.connect(dave).publish(makeParams(ethers, { primaryMatcherHash: matcher }));
+    expect(await reputation.scoreOf(dave.address)).to.be.lessThan(25n);
+    expect(await registry.corroborationOf(matcher)).to.equal(3); // dave below floor → uncounted
+
+    // Lift dave to exactly the floor → he now counts; corroboration becomes 4 (live read).
+    await reputation.grantGenesisReputation(dave.address, 25n);
+    expect(await registry.corroborationOf(matcher)).to.equal(4);
   });
 
   it("live reads: slashing a publisher drops their corroboration everywhere", async function () {
