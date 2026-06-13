@@ -34,6 +34,26 @@ error NotAuthorizedWriter();
 /// @notice `registerPublisher` called by an already-registered publisher.
 error AlreadyRegistered();
 
+// ---- Challenge game ----
+/// @notice CRE `onReport` caller is not the pinned KeystoneForwarder.
+error NotForwarder();
+/// @notice CRE report's workflow id does not match the pinned value.
+error InvalidWorkflowId();
+/// @notice CRE report's workflow owner does not match the pinned value.
+error InvalidWorkflowOwner();
+/// @notice `submitLayer1Verdict` caller is not the CREVerdictReceiver.
+error NotCreReceiver();
+/// @notice `submitLayer2Verdict` caller is not the VerifierPool.
+error NotVerifierPool();
+/// @notice `escalate` caller is not the ChallengeManager.
+error NotChallengeManagerCaller();
+/// @notice A challenge is already open for this antibody.
+error ChallengeAlreadyOpen();
+/// @notice No active challenge in the required state for this antibody.
+error NoActiveChallenge();
+/// @notice Economics bps shares exceed 10_000.
+error InvalidBps();
+
 // ---- Lifecycle / state machine ----
 /// @notice The antibody is not in a state this transition allows.
 error InvalidStatusTransition();
