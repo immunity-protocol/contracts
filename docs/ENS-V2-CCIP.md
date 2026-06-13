@@ -101,7 +101,7 @@ Secrets via keystore/env only (`IMMUNITY_DEPLOYER_PK`, `IMMUNITY_BASE_SEPOLIA_RP
 
 | What | Address / URL |
 |---|---|
-| `ImmunityL2Registry` (Base Sepolia) | `0x… (TBD — fill after Phase-1 deploy)` |
+| `ImmunityL2Registry` (Base Sepolia) | `0xa0A4CE62b6Fa02ed5ddFbb1DE6e56fC559033C06` |
 | `ImmunityL1Resolver` (Sepolia, Phase 2) | `0x… (TBD)` |
 | CCIP gateway URL (Phase 2) | `https://… (TBD)` |
 | `immunity.eth` ENS v2 registry (`setResolver` target) | `0x… (confirm in the Phase-2 spike — do NOT assume)` |
