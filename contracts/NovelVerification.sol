@@ -60,16 +60,37 @@ contract NovelVerification is IReceiver, Ownable {
     /// @param verdict    Verdict enum value (0/1/2).
     /// @param confidence Model confidence, 0–100.
     /// @param severity   Threat severity, 0–100.
+    /// @param abType     Antibody type the verdict implies (SDK AntibodyType ordering:
+    ///                   ADDRESS=0, CALL_PATTERN=1, BYTECODE=2, GRAPH=3, SEMANTIC=4).
+    /// @param flavor     SEMANTIC sub-flavor (SDK SemanticFlavor ordering:
+    ///                   COUNTERPARTY=0, MANIPULATION=1, PROMPT_INJECTION=2); 0 otherwise.
     /// @param at         Block timestamp the verdict was recorded.
+    /// @param marker     For SEMANTIC verdicts, the verbatim injection substring the CRE
+    ///                   TEE extracted from the decrypted evidence — the SDK mints a
+    ///                   marker antibody from it so identical poisoned content is blocked
+    ///                   network-wide. Empty for non-SEMANTIC verdicts.
+    /// @param reasoning  The model's human-readable rationale (ENShell-style), shown on
+    ///                   the antibody/threat detail and stored as the minted antibody's
+    ///                   reasonSummary in its public evidence envelope.
     struct Result {
         uint8 verdict;
         uint16 confidence;
         uint8 severity;
+        uint8 abType;
+        uint8 flavor;
         uint64 at;
+        string marker;
+        string reasoning;
     }
 
     /// @notice Recorded verdict per checkId (set once on the first valid report).
     mapping(bytes32 => Result) public verdictOf;
+
+    /// @notice Full verdict struct (the auto-getter would not return the `marker`
+    ///         string reliably across toolchains; this explicit memory getter does).
+    function getVerdict(bytes32 checkId) external view returns (Result memory) {
+        return verdictOf[checkId];
+    }
     /// @notice checkId requested but not yet answered (replay/dup + unsolicited guard).
     mapping(bytes32 => bool) public pending;
 
@@ -87,7 +108,14 @@ contract NovelVerification is IReceiver, Ownable {
     /// @param verdict    Verdict enum value (0/1/2).
     /// @param confidence Model confidence, 0–100.
     /// @param severity   Threat severity, 0–100.
-    event Verified(bytes32 indexed checkId, uint8 verdict, uint16 confidence, uint8 severity);
+    event Verified(
+        bytes32 indexed checkId,
+        uint8 verdict,
+        uint16 confidence,
+        uint8 severity,
+        uint8 abType,
+        uint8 flavor
+    );
     /// @param checkFee The new per-request fee (USDC, 6 decimals).
     event CheckFeeUpdated(uint256 checkFee);
 
@@ -148,7 +176,8 @@ contract NovelVerification is IReceiver, Ownable {
     }
 
     /// @inheritdoc IReceiver
-    /// @dev report = abi.encode(bytes32 checkId, uint8 verdict, uint16 confidence, uint8 severity).
+    /// @dev report = abi.encode(bytes32 checkId, uint8 verdict, uint16 confidence,
+    ///      uint8 severity, uint8 abType, uint8 flavor, string marker, string reasoning).
     ///      Spoof-safe: forwarder check + B-2 workflow pins + `pending` guard. A report
     ///      for an unknown or already-answered checkId reverts.
     function onReport(bytes calldata metadata, bytes calldata report) external override {
@@ -162,15 +191,25 @@ contract NovelVerification is IReceiver, Ownable {
             revert InvalidWorkflowOwner();
         }
 
-        (bytes32 checkId, uint8 verdict, uint16 confidence, uint8 severity) =
-            abi.decode(report, (bytes32, uint8, uint16, uint8));
+        (
+            bytes32 checkId,
+            uint8 verdict,
+            uint16 confidence,
+            uint8 severity,
+            uint8 abType,
+            uint8 flavor,
+            string memory marker,
+            string memory reasoning
+        ) = abi.decode(report, (bytes32, uint8, uint16, uint8, uint8, uint8, string, string));
 
         if (!pending[checkId]) revert UnknownCheck();
 
-        verdictOf[checkId] = Result(verdict, confidence, severity, uint64(block.timestamp));
+        verdictOf[checkId] = Result(
+            verdict, confidence, severity, abType, flavor, uint64(block.timestamp), marker, reasoning
+        );
         delete pending[checkId];
 
-        emit Verified(checkId, verdict, confidence, severity);
+        emit Verified(checkId, verdict, confidence, severity, abType, flavor);
     }
 
     /// @notice ERC-165 — advertises support for the CRE receiver interface.
