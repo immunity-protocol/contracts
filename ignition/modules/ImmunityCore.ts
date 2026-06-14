@@ -55,14 +55,22 @@ export default buildModule("ImmunityCore", (m) => {
   const genesis2 = m.getParameter("genesis2", "0xA1E7E10e89dD7EFAc1e7CbDc34015Ce2A1773060");
 
   // ---- Deploy (strictly sequential via `after`) ----
-  const usdc = m.contract("MockUSDC");
-  const reputation = m.contract("Reputation", [], { after: [usdc] });
+  // Reuse the already-deployed MockUSDC so existing balances + the live gateway
+  // keep working; only the antibody/challenge/reputation chain is freshly clean.
+  const usdc = m.contractAt(
+    "MockUSDC",
+    m.getParameter("usdc", "0xe697EF7724453F239D8c0EB9295D87C344D9CE60"),
+  );
+  const reputation = m.contract("Reputation", []);
   const protectedSet = m.contract("ProtectedSet", [], { after: [reputation] });
   const l2registry = m.contract("StubL2Registry", [], { after: [protectedSet] });
   const registrar = m.contract("PublisherRegistrar", [usdc], { after: [l2registry] });
   const challengeManager = m.contract("ChallengeManager", [usdc], { after: [registrar] });
   const verifierPool = m.contract("VerifierPool", [], { after: [challengeManager] });
-  const creReceiver = m.contract("CREVerdictReceiver", [deployer, ZERO_HASH, ZERO_ADDR], {
+  // Forwarder = the CRE KeystoneForwarder (sim on testnet); the jury workflow's
+  // DON-signed verdict is delivered THROUGH it, so onReport must trust it.
+  const creForwarder = m.getParameter("creForwarder", "0x82300bd7c3958625581cc2F77bC6464dcEcDF3e5");
+  const creReceiver = m.contract("CREVerdictReceiver", [creForwarder, ZERO_HASH, ZERO_ADDR], {
     after: [verifierPool],
   });
   const registry = m.contract(
